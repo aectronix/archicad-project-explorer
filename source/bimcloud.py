@@ -26,9 +26,9 @@ class BIMcloud():
 			self.auth = response.json()
 			print (f'Connected to {self.url}')
 
-	def get_projects(self):
-
+	def get_projects(self, criterion={}, options={}):
 		url = self.url_api + 'get-projects-by-criterion'
-		response = requests.post(url, headers={'Authorization': f'Bearer {self.auth['access_token']}'}, params={}, json={})
+		response = requests.post(url, headers={'Authorization': f'Bearer {self.auth['access_token']}'}, params={}, json={**criterion, **options})
+		# print(json.dumps(response.json(), indent = 4))
 		return response.json() if response.ok else None
 		
