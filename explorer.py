@@ -6,7 +6,19 @@ import time
 
 from datetime import datetime, timedelta
 from urllib.parse import quote, urlencode
+
 from source.bimcloud import BIMcloud
+from source.archicad import ArchicadWrapper
+
+def timer(f):
+	def wrapper(*args, **kwargs):
+		time_start = time.time()
+		result = f(*args, **kwargs)
+		time_end = time.time()
+		duration = time_end - time_start
+		return result, duration
+	return wrapper
+
 
 class Explorer():
 
@@ -26,21 +38,35 @@ class Explorer():
 		uri = f'teamwork://{en_user}@{en_host}/{en_path}'.replace('.', '%2E')
 		return uri
 
-	@staticmethod
-	def open_archicad_project(uri, version=25):
+	@timer
+	def open_archicad_project(self, uri, version=25):
 
-		app_path = 'C:\\Program Files\\GRAPHISOFT\\ARCHICAD '+version+'\\ARCHICAD.exe'
-		subprocess.Popen (f'"{app_path}" "{uri}"', start_new_session=True, shell=platform.system())
+		def is_open():
+			arc = ArchicadWrapper()
+			if arc.tapir:
+				project = arc.tapir.run('GetProjectInfo', {})
+				if project:
+					print (f'Project "{project['projectName']}" has been opened successfully')
+					return True
+
+		print(f'Opening specified project...')
+		app_path = 'C:\\Program Files\\GRAPHISOFT\\ARCHICAD '+str(version)+'\\ARCHICAD.exe'
+		archicad = subprocess.Popen (f'"{app_path}" "{uri}"', start_new_session=True, shell=platform.system())
+
+		while not is_open():
+			time.sleep(5)
+
+		return archicad
 
 	def make_queue(self, hostlist: list[str], time=3):
 
 		date_back = int((datetime.now() - timedelta(days=time)).timestamp() * 1000)
 		criterion = {
-			'$and': [
-				{'$eq': {'type': 'project'}},
-				{'$eq': {'access': 'opened'}},
-				{'$gte': {'$modifiedDate': date_back }},
-			]
+			# '$and': [
+			# 	{'$eq': {'type': 'project'}},
+			# 	{'$eq': {'access': 'opened'}},
+			# 	{'$gte': {'$modifiedDate': date_back }},
+			# ]
 		}
 
 		queue = []
@@ -69,6 +95,6 @@ if __name__ == "__main__":
 
 	print (len(queue))
 	# print (queue[263])
-	# exp.open_archicad_project(queue[263])
+	archicad, time = exp.open_archicad_project(queue[263])
 
-	# print(json.dumps(queue, indent = 4))
+	print(json.dumps(time, indent = 4))
