@@ -56,7 +56,7 @@ class Database():
 
 	def add_project(self, guid, job_id):
 
-		self.cursor.execute("INSERT INTO projects (id, job_id) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET job_id = excluded.job_id", (guid, job_id))
+		self.cursor.execute("INSERT INTO projects (id, job_id) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET job_id = excluded.job_id", (guid.lower(), job_id))
 		self.connection.commit()
 
 	def get_project(self, project_id):

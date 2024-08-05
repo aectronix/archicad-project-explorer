@@ -31,15 +31,45 @@ class Explorer():
 		self.domain = domain
 
 		self.db = Database("C:\\Users\\i.yurasov\\Desktop\\dev\\archicad-project-explorer\\report.db")
+		self.hosts = []
 
 	@staticmethod
-	def prep_project_uri(host, user, passcode, path):
+	def make_uri(host, user, passcode, path):
 
 		en_user = quote(f'{user}:{passcode}', safe=':+')
 		en_host = quote(f'{host}', safe='')
 		en_path = quote(f'{path}', safe='')
 		uri = f'teamwork://{en_user}@{en_host}/{en_path}'.replace('.', '%2E')
 		return uri
+
+	def add_hosts(self, hostlist: list[str]):
+
+		for host in hostlist:
+			cloud = BIMcloud(host, self.domain, self.user, self.password)
+			if cloud:
+				self.hosts.append(cloud)
+
+	def run_queue(self, criterion={}, time=3):
+
+		job = self.db.add_job()
+		date_back = int((datetime.now() - timedelta(days=time)).timestamp() * 1000)
+		criterion = {
+			'$and': [
+				{'$eq': {'type': 'project'}},
+				{'$eq': {'access': 'opened'}},
+				{'$gte': {'$modifiedDate': date_back }},
+				# {'$eq': {'id': '4268A950-B701-491D-A805-7775A5A97C37' }},
+			]
+		}
+		for host in self.hosts:
+			for project in host.get_projects(criterion):
+				pId = project['id'].lower()
+				if not (project_db := self.db.get_project(pId)) or project_db[2]*1000 < project['$modifiedDate']:
+					print (project['name'])
+					uri = self.make_uri(host.url, self.user, self.passcode, project['$path'].replace('Project Root/', ''))
+					archicad, otime = exp.open_archicad_project(uri)
+					if archicad:
+						self.db.add_project(pId, job)
 
 	@timer
 	def open_archicad_project(self, uri, version=25):
@@ -61,38 +91,7 @@ class Explorer():
 
 		return connect
 
-	def make_queue(self, hostlist: list[str], time=3, criterion={}):
-
-		date_back = int((datetime.now() - timedelta(days=time)).timestamp() * 1000)
-		criterion = {
-			'$and': [
-				{'$eq': {'type': 'project'}},
-				{'$eq': {'access': 'opened'}},
-				{'$gte': {'$modifiedDate': date_back }},
-			]
-		}
-		queue = [
-			(
-				self.prep_project_uri(host, self.user, self.passcode, project['$path'].replace('Project Root/', '')),
-				project['id'].lower()
-			)
-	        for host in hostlist
-	        for project in BIMcloud(host, self.domain, self.user, self.password).get_projects(criterion)
-	        if not (project_db := self.db.get_project(project['id'].lower())) or project_db[2] < project['$modifiedDate']
-		]
-		return queue or None
-
-	def run_queue(self, queue):
-
-		for q in queue:
-			metrics = {}
-			archicad, otime = exp.open_archicad_project(q[0])
-			if archicad:
-				metrics = self.get_project_metrics(archicad)
-
 	def get_project_metrics(self, connect):
-
-		print (otime)
 
 		data = []
 		return data
@@ -109,7 +108,7 @@ if __name__ == "__main__":
 	arg = cmd.parse_args()
 
 	exp = Explorer(arg.user, arg.password, arg.passcode, arg.domain)
-	queue = exp.make_queue([s for s in arg.servers.split(',') if s])
-	exp.run_queue(queue)
+	exp.add_hosts([s for s in arg.servers.split(',') if s])
+	exp.run_queue()
 
 	# print(json.dumps(time, indent = 4))
