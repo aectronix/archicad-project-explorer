@@ -8,6 +8,7 @@ class ArchicadWrapper():
 
 	def __init__(self, port=19723):
 
+		self.live = False
 		self.port = port
 		self.commands = None
 		self.types = None
