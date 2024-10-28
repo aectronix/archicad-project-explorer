@@ -58,7 +58,7 @@ class Explorer():
 				{'$eq': {'type': 'project'}},
 				{'$eq': {'access': 'opened'}},
 				{'$gte': {'$modifiedDate': date_back }},
-				# {'$eq': {'id': '4268A950-B701-491D-A805-7775A5A97C37' }},
+				{'$eq': {'id': '4268A950-B701-491D-A805-7775A5A97C37' }},
 			]
 		}
 		for host in self.hosts:
@@ -67,9 +67,53 @@ class Explorer():
 				if not (project_db := self.db.get_project(pId)) or project_db[2]*1000 < project['$modifiedDate']:
 					print (project['name'])
 					uri = self.make_uri(host.url, self.user, self.passcode, project['$path'].replace('Project Root/', ''))
-					archicad, otime = exp.open_archicad_project(uri)
-					if archicad:
-						self.db.add_project(pId, job)
+					# archicad, otime = exp.open_archicad_project(uri)
+					# if archicad:
+					metrics = {
+						'file_name': project['name'],
+						'file_location': project['$path'],
+						'file_project': '000',
+						'file_type': 'tw',
+						'file_size': project['$size'],
+						'file_app_v': project['$version'],
+						'file_status': project['access'],
+						'file_ctime': 2.1,
+						'file_mtime': round(project['$modifiedDate']/1000),
+						'file_atime': 1,
+						'file_otime': 3,
+						'file_ptime': 0,
+						'file_jusers': 5,
+						'file_ausers': 0,
+					}
+					metrics_set = set(metrics.keys())
+
+					delta_query = []
+					delta_latest = self.db.get_metrics_from_deltas(pId)
+					metrics_last = {row[0]: {'id': row[1], 'value': row[2]} for row in delta_latest}
+					metrics_last_set = set(metrics_last.keys())
+					print(json.dumps(delta_latest, indent = 4))
+
+					for metric, value in metrics.items():
+						if metric not in metrics_last:
+							print (metric)
+							t = 'new'							
+						elif str(value) != str(metrics_last[metric]['value']):
+							print (str(value) + ' - ' + metrics_last[metric]['value'])
+							t = 'mod'
+						else:
+							continue
+						delta_query.append((pId, metrics_last[metric]['id'], value, t, job))
+
+					deleted_set = metrics_last_set - metrics_set
+					for metric_del in deleted_set:
+						print (metric_del)
+						delta_query.append((pId, metrics_last[metric_del]['id'], metrics_last[metric_del]['value'], 'del', job))
+
+					if delta_query:
+						self.db.add_metrics_delta(delta_query)
+						self.db.upsert_project(pId, job)
+		
+
 
 	@timer
 	def open_archicad_project(self, uri, version=25):
